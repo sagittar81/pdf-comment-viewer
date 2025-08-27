@@ -375,9 +375,9 @@ function renderSingleAnnotation(annotation, repliesByParent, viewport, annotatio
         popup.textContent = fullContent;
 
         // 스타일 설정
-        popup.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+        popup.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
         popup.style.color = 'rgba(255, 0, 0, 1)';
-        popup.style.border = '2px solid red';
+        popup.style.border = '1px solid red';
         popup.style.borderRadius = '4px';
         popup.style.padding = '8px';
         popup.style.position = 'absolute';
@@ -575,8 +575,19 @@ function fitToWidth() {
     }
 }
 
+function showLoadingOverlay(message = '📄 페이지 다시 로딩 중...') {
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.textContent = message;
+    overlay.style.visibility = 'visible';
+}
+
+function hideLoadingOverlay() {
+    document.getElementById('loadingOverlay').style.visibility = 'hidden';
+}
+
 // 줌 업데이트 - 현재 스크롤 위치 기준으로 유지
 async function updateZoom() {
+    showLoadingOverlay();
     if (!pdfDoc) return;
 
     // 현재 상태 저장
@@ -628,6 +639,7 @@ async function updateZoom() {
         }, 200);
 
     }, 150); // 렌더링 안정화를 위한 지연
+    hideLoadingOverlay();
 }
 
 // 스크롤 핸들러 함수 분리

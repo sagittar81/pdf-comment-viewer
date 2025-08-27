@@ -144,7 +144,7 @@
             overflow-x: auto;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
             padding: 20px;
             scroll-behavior: smooth;
         }
@@ -276,6 +276,25 @@
                 font-size: 11px;
             }
         }
+
+        /* 로딩 오버레이 */
+        #loadingOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(3px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            z-index: 9999;
+            visibility: hidden;
+        }
     </style>
 </head>
 <body>
@@ -309,13 +328,16 @@
             <div class="page-info" id="pageInfo"></div>
         </div>
 
-        <div class="pdf-viewer" id="pdfViewer">
-            <div class="welcome-screen" id="welcomeScreen">
-                <div class="welcome-icon">📄</div>
-                <div class="welcome-text">PDF 파일을 열어보세요</div>
-                <div class="welcome-subtext">좌측 "파일 열기" 버튼 클릭 또는 파일을 드래그 앤 드롭</div>
-            </div>
+        <div class="welcome-screen" id="welcomeScreen" style="text-align: center;">
+            <div class="welcome-icon">📄</div>
+            <div class="welcome-text">PDF 파일을 열어보세요</div>
+            <div class="welcome-subtext">좌측 "파일 열기" 버튼 클릭 또는 파일을 드래그 앤 드롭</div>
         </div>
+        
+        <div class="pdf-viewer" id="pdfViewer">
+        </div>
+        <!-- 로딩 오버레이 -->
+        <div id="loadingOverlay">📄 페이지 다시 로딩 중...</div>
     </div>
 </div>
 

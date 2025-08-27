@@ -7,7 +7,7 @@ let mainWindow;
 function createWindow() {
     // 메인 윈도우 생성
     mainWindow = new BrowserWindow({
-        width: 1200,
+        width: 1400,
         height: 800,
         webPreferences: {
             nodeIntegration: false,
