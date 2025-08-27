@@ -30,7 +30,7 @@ function createWindow() {
 
     // 개발 모드에서 개발자 도구 열기
     if (process.argv.includes('--dev')) {
-        mainWindow.webContents.openDevTools();
+        //mainWindow.webContents.openDevTools();
     }
 }
 
