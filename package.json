@@ -1,6 +1,6 @@
 {
   "name": "pdf-viewer-electron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "PDF Viewer with annotation support built with Electron",
   "main": "src/main.js",
   "scripts": {
@@ -41,11 +41,11 @@
           "arch": ["x64", "arm64"]
         }
       ],
-      "icon": "assets/app.icns"
+      "icon": "assets/icon.icns"
     },
     "dmg": {
       "title": "PDF Comment Viewer",
-      "icon": "assets/app.icns",
+      "icon": "assets/icon.icns",
       "contents": [
         {
           "x": 130,
