@@ -5,7 +5,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let pdfDoc = null;
 let pageNum = 1;
 let pageCount = 0;
-let scale = 1.0;
+let scale = 1.5;
 let rendering = false;
 let pageRendering = false;
 let pageNumPending = null;
@@ -44,6 +44,18 @@ document.addEventListener('drop', (e) => {
         loadPdfFromFile(files[0]);
     }
 });
+
+document.addEventListener('wheel', (event) => {
+    if (event.ctrlKey) { // pinch 제스처 감지
+        event.preventDefault();
+        const delta = event.deltaY > 0 ? -0.1 : 0.1;
+        scale = Math.min(Math.max(0.5, scale + delta), 5.0); // 최소 0.5x ~ 최대 5x
+
+        // PDF.js render 다시 호출
+        renderPage(currentPage, scale);
+    }
+}, { passive: false });
+
 
 // Electron API 이벤트 리스너
 if (window.electronAPI) {
@@ -259,7 +271,9 @@ function renderSingleAnnotation(annotation, repliesByParent, viewport, annotatio
 
                 // viewport 좌표로 변환
                 const [vx1, vy1] = viewport.convertToViewportPoint(x1, y1);
+                const [vx2, vy2] = viewport.convertToViewportPoint(x2, y2);
                 const [vx3, vy3] = viewport.convertToViewportPoint(x3, y3);
+                const [vx4, vy4] = viewport.convertToViewportPoint(x4, y4);
 
                 // strikeout 영역 계산 (y 중앙)
                 const strikeDiv = document.createElement('div');
@@ -267,13 +281,12 @@ function renderSingleAnnotation(annotation, repliesByParent, viewport, annotatio
                 strikeDiv.style.left = `${Math.min(vx1, vx3)}px`;
                 strikeDiv.style.top = `${(vy1 + vy3) / 2}px`;
                 strikeDiv.style.width = `${Math.abs(vx1 - vx3)}px`;
-                strikeDiv.style.height = '1.5px';
+                strikeDiv.style.height = '2px';
                 strikeDiv.style.backgroundColor = 'red';
                 strikeDiv.style.zIndex = '12';
-
                 annotationLayer.appendChild(strikeDiv);
             });
-            return; // StrikeOut은 여기서 끝
+            //return; // StrikeOut은 여기서 끝
         }
         // 기본 내용 - 객체 처리 개선
         let baseContent = annotation.contents || annotation.richText || '';
