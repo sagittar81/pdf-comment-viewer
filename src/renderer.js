@@ -252,6 +252,29 @@ async function renderAnnotations(page, viewport, annotationLayer) {
 // 개별 주석 렌더링
 function renderSingleAnnotation(annotation, repliesByParent, viewport, annotationLayer) {
     try {
+        if (annotation.subtype === 'StrikeOut' && annotation.quadPoints) {
+            annotation.quadPoints.forEach(quad => {
+                // quadPoints 는 [x1, y1, x2, y2, x3, y3, x4, y4] 형태
+                const [x1, y1, x2, y2, x3, y3, x4, y4] = quad;
+
+                // viewport 좌표로 변환
+                const [vx1, vy1] = viewport.convertToViewportPoint(x1, y1);
+                const [vx3, vy3] = viewport.convertToViewportPoint(x3, y3);
+
+                // strikeout 영역 계산 (y 중앙)
+                const strikeDiv = document.createElement('div');
+                strikeDiv.style.position = 'absolute';
+                strikeDiv.style.left = `${Math.min(vx1, vx3)}px`;
+                strikeDiv.style.top = `${(vy1 + vy3) / 2}px`;
+                strikeDiv.style.width = `${Math.abs(vx1 - vx3)}px`;
+                strikeDiv.style.height = '1.5px';
+                strikeDiv.style.backgroundColor = 'red';
+                strikeDiv.style.zIndex = '12';
+
+                annotationLayer.appendChild(strikeDiv);
+            });
+            return; // StrikeOut은 여기서 끝
+        }
         // 기본 내용 - 객체 처리 개선
         let baseContent = annotation.contents || annotation.richText || '';
 
