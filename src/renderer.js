@@ -5,10 +5,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let pdfDoc = null;
 let pageNum = 1;
 let pageCount = 0;
-let scale = 1.5;
+let scale = 1.2;
 let rendering = false;
 let pageRendering = false;
 let pageNumPending = null;
+let currentZoom = 1.2;
 
 // DOM 요소들
 const sidebar = document.getElementById('sidebar');
@@ -49,7 +50,7 @@ document.addEventListener('wheel', (event) => {
     if (event.ctrlKey) { // pinch 제스처 감지
         event.preventDefault();
         const delta = event.deltaY > 0 ? -0.1 : 0.1;
-        scale = Math.min(Math.max(0.5, scale + delta), 5.0); // 최소 0.5x ~ 최대 5x
+        scale = Math.min(Math.max(0.5, currentZoom + delta), 5.0); // 최소 0.5x ~ 최대 5x
 
         // PDF.js render 다시 호출
         renderPage(currentPage, scale);
@@ -267,13 +268,11 @@ function renderSingleAnnotation(annotation, repliesByParent, viewport, annotatio
         if (annotation.subtype === 'StrikeOut' && annotation.quadPoints) {
             annotation.quadPoints.forEach(quad => {
                 // quadPoints 는 [x1, y1, x2, y2, x3, y3, x4, y4] 형태
-                const [x1, y1, x2, y2, x3, y3, x4, y4] = quad;
+                const [x1, y1, x3, y3] = quad;
 
                 // viewport 좌표로 변환
                 const [vx1, vy1] = viewport.convertToViewportPoint(x1, y1);
-                const [vx2, vy2] = viewport.convertToViewportPoint(x2, y2);
                 const [vx3, vy3] = viewport.convertToViewportPoint(x3, y3);
-                const [vx4, vy4] = viewport.convertToViewportPoint(x4, y4);
 
                 // strikeout 영역 계산 (y 중앙)
                 const strikeDiv = document.createElement('div');
@@ -286,7 +285,30 @@ function renderSingleAnnotation(annotation, repliesByParent, viewport, annotatio
                 strikeDiv.style.zIndex = '12';
                 annotationLayer.appendChild(strikeDiv);
             });
-            //return; // StrikeOut은 여기서 끝
+
+            // 👇 추가: 연결된 InsertText 주석 찾아서 표시
+            const replacement = Object.values(repliesByParent[annotation.id] || [])
+              .map(r => r.contents || r.richText || '')
+              .join('\n');
+
+            if (replacement && replacement.trim() !== '') {
+              const popup = document.createElement('div');
+              popup.className = 'annotation-popup';
+              popup.textContent = `바꿀 텍스트: ${replacement}`;
+
+              popup.style.backgroundColor = 'rgba(255,255,255,0.9)';
+              popup.style.color = 'blue';
+              popup.style.border = '1px solid blue';
+              popup.style.borderRadius = '4px';
+              popup.style.padding = '4px 6px';
+              popup.style.position = 'absolute';
+              popup.style.left = '20px';
+              popup.style.top = '20px';
+              popup.style.fontSize = '12px';
+              popup.style.zIndex = '15';
+              annotationLayer.appendChild(popup);
+            }
+          //return; // StrikeOut 처리 끝
         }
         // 기본 내용 - 객체 처리 개선
         let baseContent = annotation.contents || annotation.richText || '';
@@ -553,18 +575,21 @@ function updatePageInfo() {
 
 // 줌 컨트롤
 function zoomIn() {
-    scale = Math.min(scale * 1.2, 3.0);
-    updateZoom();
+    //scale = Math.min(scale * 1.2, 3.0);
+    currentZoom = Math.min(currentZoom * 1.1, 5.0);
+    applyZoom();
 }
 
 function zoomOut() {
-    scale = Math.max(scale / 1.2, 0.3);
-    updateZoom();
+    //scale = Math.max(scale / 1.2, 0.3);
+  currentZoom = Math.max(currentZoom / 1.1, 0.3);
+    applyZoom();
 }
 
 function actualSize() {
-    scale = 1.0;
-    updateZoom();
+    //scale = 1.0;
+    currentZoom = 1.0;
+    applyZoom();
 }
 
 function fitToWidth() {
@@ -582,7 +607,7 @@ function fitToWidth() {
             // 스케일이 실제로 변경된 경우만 업데이트
             if (Math.abs(scale - newScale) > 0.01) {
                 scale = newScale;
-                updateZoom();
+                applyZoom();
             }
         });
     }
@@ -598,9 +623,41 @@ function hideLoadingOverlay() {
     document.getElementById('loadingOverlay').style.visibility = 'hidden';
 }
 
+function applyZoom() {
+  const pdfContainer = pdfViewer;
+  const currentScrollLeft = pdfContainer.scrollLeft;
+  const currentScrollTop = pdfContainer.scrollTop;
+
+  // 현재 스크롤 위치의 상대적 비율 저장
+  const scrollLeftRatio = currentScrollLeft / (pdfContainer.scrollWidth - pdfContainer.clientWidth || 1);
+  const scrollTopRatio = currentScrollTop / (pdfContainer.scrollHeight - pdfContainer.clientHeight || 1);
+
+  // 모든 페이지에 transform 적용
+  const pages = document.querySelectorAll('.pdf-page');
+  pages.forEach(page => {
+    page.style.transform = `scale(${currentZoom})`;
+    page.style.transformOrigin = 'top left';
+    page.style.marginBottom = `${20 * currentZoom}px`; // 페이지 간격도 조정
+  });
+
+  // 줌 레벨 표시 업데이트
+  if (typeof zoomLevel !== 'undefined') {
+    zoomLevel.textContent = Math.round(currentZoom * 100) + '%';
+  }
+
+  // 스크롤 위치 조정 (다음 프레임에서 실행)
+  requestAnimationFrame(() => {
+    const newScrollWidth = pdfContainer.scrollWidth - pdfContainer.clientWidth;
+    const newScrollHeight = pdfContainer.scrollHeight - pdfContainer.clientHeight;
+
+    pdfContainer.scrollLeft = newScrollWidth * scrollLeftRatio;
+    pdfContainer.scrollTop = newScrollHeight * scrollTopRatio;
+  });
+}
+
 // 줌 업데이트 - 현재 스크롤 위치 기준으로 유지
 async function updateZoom() {
-    showLoadingOverlay();
+    /*showLoadingOverlay();
     if (!pdfDoc) return;
 
     // 현재 상태 저장
@@ -652,7 +709,8 @@ async function updateZoom() {
         }, 200);
 
     }, 150); // 렌더링 안정화를 위한 지연
-    hideLoadingOverlay();
+    hideLoadingOverlay();*/
+    applyZoom();
 }
 
 // 스크롤 핸들러 함수 분리
