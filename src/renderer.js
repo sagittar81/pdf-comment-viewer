@@ -270,7 +270,6 @@ function renderAnnotationGroup(mainAnnotation, annotationGroup, viewport, annota
         const [vx1, vy1] = viewport.convertToViewportPoint(x1, y1);
         const [vx3, vy3] = viewport.convertToViewportPoint(x3, y3);
 
-        // strikeout 선 그리기
         const strikeDiv = document.createElement('div');
         strikeDiv.style.position = 'absolute';
         strikeDiv.style.left = `${Math.min(vx1, vx3)}px`;
@@ -283,26 +282,23 @@ function renderAnnotationGroup(mainAnnotation, annotationGroup, viewport, annota
       });
     }
 
-    // 메인 주석 내용 처리
+    // 주석 내용 처리
     let baseContent = getAnnotationContent(mainAnnotation);
     if (!baseContent || baseContent.trim() === '') {
       baseContent = `${mainAnnotation.subtype || 'Unknown'} 주석`;
     }
 
-    // 같은 그룹의 다른 주석들 내용 수집 (내부 주석들)
     const otherAnnotations = annotationGroup.filter(ann =>
-      ann !== mainAnnotation &&
-      ann.subtype !== 'Popup'
+      ann !== mainAnnotation && ann.subtype !== 'Popup'
     );
 
     const otherContents = otherAnnotations
       .map(ann => getAnnotationContent(ann))
       .filter(content => content && content.trim() !== '');
 
-    // 전체 내용 조합
     let fullContent = baseContent;
     if (otherContents.length > 0) {
-      fullContent = `${baseContent}\n내부 주석: ${otherContents.join(', ')}`;
+      fullContent = `${otherContents.join(', ')}`;
     }
 
     console.log('최종 내용:', fullContent);
@@ -316,37 +312,66 @@ function renderAnnotationGroup(mainAnnotation, annotationGroup, viewport, annota
     popup.className = 'annotation-popup';
     popup.textContent = fullContent;
 
-    // 스타일 설정
-    popup.style.backgroundColor = 'rgba(255,255,255,0.9)';
-    popup.style.color = mainAnnotation.subtype === 'StrikeOut' ? 'blue' : 'red';
-    popup.style.border = `1px solid ${mainAnnotation.subtype === 'StrikeOut' ? 'blue' : 'red'}`;
-    popup.style.borderRadius = '4px';
-    popup.style.padding = '8px';
-    popup.style.position = 'absolute';
-    popup.style.left = `${vx1}px`;
-    popup.style.top = `${vy1 - 10}px`;
-    popup.style.transform = 'translateY(-100%)';
-    popup.style.pointerEvents = 'auto';
-    popup.style.userSelect = 'text';
-    popup.style.whiteSpace = 'pre-line';
-    popup.style.zIndex = '15';
-    popup.style.cursor = 'grab';
-    popup.style.fontSize = '12px';
-    popup.style.maxWidth = '200px';
-    popup.style.wordWrap = 'break-word';
-    popup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+    // 복사 가능한 스타일 설정
+    popup.style.cssText = `
+      background-color: rgba(255,255,255,0.4);
+      color: ${mainAnnotation.subtype === 'StrikeOut' ? 'blue' : 'red'};
+      border: 1px solid ${mainAnnotation.subtype === 'StrikeOut' ? 'blue' : 'red'};
+      border-radius: 4px;
+      padding: 8px;
+      position: absolute;
+      left: ${vx1}px;
+      top: ${vy1 - 10}px;
+      transform: translateY(-100%);
+      pointer-events: auto;
+      user-select: text;
+      white-space: pre-line;
+      z-index: 15;
+      cursor: grab;
+      font-size: 12px;
+      max-width: 200px;
+      word-wrap: break-word;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+    `;
+
     popup.setAttribute('tabindex', '0');
 
-    // 드래그 기능 추가
+    // 드래그 기능 추가 (수정된 버전)
     addDragFunctionality(popup);
 
-    // 클릭 이벤트
-    popup.addEventListener('click', function () {
+    // 클릭 이벤트 - 포커스 및 z-index 관리
+    popup.addEventListener('click', function (e) {
+      // 다른 팝업들의 z-index 리셋
       document.querySelectorAll('.annotation-popup').forEach(el => {
         el.style.zIndex = '15';
       });
       popup.style.zIndex = '20';
       popup.focus();
+
+      // 이벤트 전파 중단하여 드래그와 충돌 방지
+      e.stopPropagation();
+    });
+
+    // 더블클릭으로 전체 선택
+    popup.addEventListener('dblclick', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+
+      const range = document.createRange();
+      range.selectNodeContents(popup);
+      selection.addRange(range);
+    });
+
+    // 우클릭 컨텍스트 메뉴에서 복사 허용
+    popup.addEventListener('contextmenu', function (e) {
+      // 브라우저 기본 컨텍스트 메뉴 허용 (복사 옵션 포함)
+      e.stopPropagation();
     });
 
     annotationLayer.appendChild(popup);
@@ -384,36 +409,175 @@ function getAnnotationContent(annotation) {
 }
 
 // 드래그 기능 추가
+// 드래그 기능 수정 - 텍스트 선택과 드래그 충돌 해결
 function addDragFunctionality(popup) {
   let offsetX, offsetY, isDragging = false;
-  let dragStartedInsideSelection = false;
+  let dragStarted = false;
+  let mouseDownX, mouseDownY;
 
   popup.addEventListener('mousedown', function (e) {
+    // 마우스 다운 위치 저장
+    mouseDownX = e.clientX;
+    mouseDownY = e.clientY;
+
+    // 현재 선택된 텍스트가 있는지 확인
     const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) {
-      dragStartedInsideSelection = true;
+    const selectedText = selection.toString();
+
+    // 선택된 텍스트가 있으면 드래그 비활성화
+    if (selectedText.length > 0) {
       return;
     }
 
-    isDragging = true;
+    dragStarted = true;
     offsetX = e.clientX - popup.offsetLeft;
     offsetY = e.clientY - popup.offsetTop;
-    popup.style.cursor = 'grabbing';
+
+    // 약간의 지연을 두고 실제 드래그 시작
+    setTimeout(() => {
+      if (dragStarted) {
+        isDragging = true;
+        popup.style.cursor = 'grabbing';
+        popup.style.userSelect = 'none'; // 드래그 중에는 텍스트 선택 비활성화
+      }
+    }, 150); // 150ms 지연
   });
 
   document.addEventListener('mousemove', function (e) {
-    if (!isDragging || dragStartedInsideSelection) return;
-    popup.style.left = `${e.clientX - offsetX}px`;
-    popup.style.top = `${e.clientY - offsetY}px`;
-  });
+    if (!dragStarted) return;
 
-  document.addEventListener('mouseup', function () {
-    if (isDragging) {
-      isDragging = false;
-      dragStartedInsideSelection = false;
-      popup.style.cursor = 'grab';
+    // 마우스가 일정 거리 이상 움직였을 때만 드래그로 인식
+    const moveDistance = Math.sqrt(
+      Math.pow(e.clientX - mouseDownX, 2) + Math.pow(e.clientY - mouseDownY, 2)
+    );
+
+    if (moveDistance > 5 && isDragging) { // 5px 이상 움직였을 때
+      popup.style.left = `${e.clientX - offsetX}px`;
+      popup.style.top = `${e.clientY - offsetY}px`;
     }
   });
+
+  document.addEventListener('mouseup', function (e) {
+    if (dragStarted) {
+      const moveDistance = Math.sqrt(
+        Math.pow(e.clientX - mouseDownX, 2) + Math.pow(e.clientY - mouseDownY, 2)
+      );
+
+      // 움직임이 거의 없었다면 클릭으로 처리 (텍스트 선택 가능)
+      if (moveDistance < 5) {
+        popup.style.userSelect = 'text';
+        // 포커스를 주어 텍스트 선택 가능하게 함
+        popup.focus();
+      }
+
+      dragStarted = false;
+      isDragging = false;
+      popup.style.cursor = 'grab';
+
+      // 드래그가 끝나면 텍스트 선택 다시 활성화
+      setTimeout(() => {
+        popup.style.userSelect = 'text';
+      }, 100);
+    }
+  });
+}
+
+// Cmd+A/Ctrl+A 처리 개선
+document.addEventListener('keydown', e => {
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isSelectAll = (isMac && e.metaKey && e.key === 'a') || (!isMac && e.ctrlKey && e.key === 'a');
+
+  if (!isSelectAll) return;
+
+  const active = document.activeElement;
+
+  // 주석 팝업이 포커스된 상태에서 Ctrl+A/Cmd+A 처리
+  if (active && active.classList.contains('annotation-popup')) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+
+    const range = document.createRange();
+    range.selectNodeContents(active);
+    selection.addRange(range);
+
+    return false;
+  }
+});
+
+// 복사 기능 추가 (Ctrl+C/Cmd+C)
+document.addEventListener('keydown', e => {
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const isCopy = (isMac && e.metaKey && e.key === 'c') || (!isMac && e.ctrlKey && e.key === 'c');
+
+  if (!isCopy) return;
+
+  const selection = window.getSelection();
+  const selectedText = selection.toString();
+
+  if (selectedText.length > 0) {
+    // 클립보드에 복사
+    try {
+      navigator.clipboard.writeText(selectedText).then(() => {
+        console.log('텍스트가 클립보드에 복사되었습니다:', selectedText);
+
+        // 복사 완료 표시 (선택사항)
+        showCopyNotification();
+      }).catch(err => {
+        console.error('클립보드 복사 실패:', err);
+        // 폴백: execCommand 사용
+        try {
+          document.execCommand('copy');
+          console.log('execCommand로 복사 완료');
+          showCopyNotification();
+        } catch (fallbackErr) {
+          console.error('복사 실패:', fallbackErr);
+        }
+      });
+    } catch (err) {
+      console.error('복사 중 오류:', err);
+    }
+  }
+});
+
+// 복사 완료 알림 표시 함수
+function showCopyNotification() {
+  // 기존 알림이 있으면 제거
+  const existingNotification = document.querySelector('.copy-notification');
+  if (existingNotification) {
+    existingNotification.remove();
+  }
+
+  const notification = document.createElement('div');
+  notification.className = 'copy-notification';
+  notification.textContent = '📋 복사 완료!';
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 128, 0, 0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    z-index: 10000;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  `;
+
+  document.body.appendChild(notification);
+
+  // 2초 후 페이드아웃
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300);
+  }, 2000);
 }
 
 // 주석 개수 카운터 추가
@@ -423,7 +587,7 @@ function addAnnotationCounter(annotationLayer, count) {
   countLabel.style.position = 'absolute';
   countLabel.style.top = '8px';
   countLabel.style.right = '12px';
-  countLabel.style.backgroundColor = 'rgba(255,255,255,0.9)';
+  countLabel.style.backgroundColor = 'rgba(255,255,255,0.4)';
   countLabel.style.padding = '4px 8px';
   countLabel.style.borderRadius = '8px';
   countLabel.style.fontWeight = 'bold';
