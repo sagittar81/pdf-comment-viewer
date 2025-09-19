@@ -5,11 +5,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let pdfDoc = null;
 let pageNum = 1;
 let pageCount = 0;
-let scale = 1.2;
+let scale = 1.5;
 let rendering = false;
 let pageRendering = false;
 let pageNumPending = null;
-let currentZoom = 1.2;
+let currentZoom = 1.5;
 
 // DOM 요소들
 const sidebar = document.getElementById('sidebar');
